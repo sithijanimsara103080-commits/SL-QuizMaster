@@ -285,12 +285,12 @@ export default function BattlePage() {
     const battleMessages: ChatMessage[] = [];
     
     if (fastestCorrectPlayer) {
-    battleMessages.push({
+     battleMessages.push({
     id: Date.now().toString(),
     playerName: 'System',
     message: `🏆 ${(fastestCorrectPlayer as Player).name} answered fastest and correctly! +20 points`,
     type: 'battle',
-    timestamp: new Date()
+    timestamp: new Date() //
 });
     }
 
@@ -739,5 +739,6 @@ export default function BattlePage() {
   );
 
 } 
+
 
 
