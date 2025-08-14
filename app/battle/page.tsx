@@ -286,11 +286,13 @@ export default function BattlePage() {
     
     if (fastestCorrectPlayer) {
       battleMessages.push({
-        id: Date.now().toString(),
-        playerName: 'System',
-        message: `🏆 ${(fastestCorrectPlayer as Player).name} answered fastest and correctly! +20 points`,
-        type: 'battle'
-      });
+    battleMessages.push({
+    id: Date.now().toString(),
+    playerName: 'System',
+    message: `🏆 ${(fastestCorrectPlayer as Player).name} answered fastest and correctly! +20 points`,
+    type: 'battle',
+    timestamp: new Date()
+});
     }
 
     players.forEach(player => {
@@ -738,3 +740,4 @@ export default function BattlePage() {
   );
 
 } 
+
