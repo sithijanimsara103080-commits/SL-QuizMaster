@@ -288,8 +288,7 @@ export default function BattlePage() {
       battleMessages.push({
         id: Date.now().toString(),
         playerName: 'System',
-        message: `🏆 ${fastestCorrectPlayer.name} answered fastest and correctly! +20 points`,
-        timestamp: new Date(),
+        message: `🏆 ${(fastestCorrectPlayer as Player).name} answered fastest and correctly! +20 points`,
         type: 'battle'
       });
     }
@@ -737,4 +736,5 @@ export default function BattlePage() {
       </div>
     </div>
   );
+
 } 
