@@ -285,7 +285,6 @@ export default function BattlePage() {
     const battleMessages: ChatMessage[] = [];
     
     if (fastestCorrectPlayer) {
-      battleMessages.push({
     battleMessages.push({
     id: Date.now().toString(),
     playerName: 'System',
@@ -740,4 +739,5 @@ export default function BattlePage() {
   );
 
 } 
+
 
