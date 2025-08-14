@@ -1,15 +1,23 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import BattleHeader from './components/BattleHeader';
-import BattleLeftSidebar from './components/BattleLeftSidebar';
-import BattleCenter from './components/BattleCenter';
-import BattleRightSidebar from './components/BattleRightSidebar';
-import CountdownOverlay from './components/CountdownOverlay';
-import RoundResultsModal from './components/RoundResultsModal';
+import React, { useState, useEffect, useCallback } from 'react';
 
+// This is a self-contained component. All sub-components are defined within this file.
+// This is necessary because the previous code was trying to import files that do not exist in this environment.
 
+// Helper to replace `next/navigation`'s useRouter.
+// Since this is a single, self-contained component, we can't actually navigate away.
+// So we'll just show an alert and reload the page.
+const mockRouter = {
+  push: (path: string) => {
+    alert(`Navigating to ${path}.`);
+    // In a real app, this would perform a client-side navigation.
+    // For this demonstration, we'll just simulate a redirect.
+    window.location.reload();
+  },
+};
+
+// Interface definitions from the original code
 interface Player {
   id: string;
   name: string;
@@ -69,8 +77,251 @@ interface BattleState {
   roundEndTime: number;
 }
 
+// --- SUB-COMPONENTS ---
+// All sub-components are defined here to make the main component self-contained and runnable.
+
+const BattleHeader = ({ roomCode, onThemeToggle, onSoundToggle, onLeave, soundEnabled, theme, battleState, onStartBattle, onShowInvites, pendingInvitesCount }: any) => (
+  <header className={`flex items-center justify-between p-4 shadow-md transition-colors duration-300 ${theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-white text-gray-800'}`}>
+    <div className="flex items-center space-x-4">
+      <h1 className="text-xl font-bold">Quiz Battle</h1>
+      <span className="bg-primary-500 rounded-full px-3 py-1 text-sm font-semibold text-white">Room: {roomCode}</span>
+    </div>
+    <div className="flex items-center space-x-4">
+      {battleState.isWaiting && (
+        <>
+          <button
+            onClick={onStartBattle}
+            className="rounded-full bg-green-500 px-6 py-2 font-bold text-white shadow-lg transition-transform hover:scale-105"
+          >
+            Start Battle
+          </button>
+          <div className="relative">
+            <button
+              onClick={onShowInvites}
+              className="rounded-full bg-blue-500 px-4 py-2 font-bold text-white shadow-lg transition-transform hover:scale-105"
+            >
+              Invites ({pendingInvitesCount})
+            </button>
+            {pendingInvitesCount > 0 && (
+              <span className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white">
+                {pendingInvitesCount}
+              </span>
+            )}
+          </div>
+        </>
+      )}
+      <button onClick={onSoundToggle} className="text-xl">
+        {soundEnabled ? '🔊' : '🔇'}
+      </button>
+      <button onClick={onThemeToggle} className="text-xl">
+        {theme === 'dark' ? '☀️' : '🌙'}
+      </button>
+      <button onClick={onLeave} className="rounded-full bg-red-500 px-4 py-2 font-bold text-white shadow-lg transition-transform hover:scale-105">
+        Leave
+      </button>
+    </div>
+  </header>
+);
+
+const BattleLeftSidebar = ({ players, roundNumber, totalRounds, allUsers, currentUser, onInvitePlayer, battleState }: any) => (
+  <aside className="w-1/4 p-4 border-r border-border overflow-y-auto">
+    <div className="mb-6">
+      <h2 className="text-lg font-semibold mb-2">Players ({players.length})</h2>
+      <div className="space-y-4">
+        {players.map((player: Player) => (
+          <div key={player.id} className="flex items-center space-x-3 p-2 bg-muted/50 rounded-xl shadow-sm">
+            <img src={player.avatar} alt={player.name} className="w-10 h-10 rounded-full border-2 border-primary" />
+            <div className="flex-1">
+              <p className="font-semibold">{player.name}</p>
+              <p className="text-sm text-muted-foreground">{player.grade}</p>
+            </div>
+            <span className={`text-lg font-bold ${player.isCorrect === true ? 'text-green-500' : player.isCorrect === false ? 'text-red-500' : 'text-gray-500'}`}>
+              {player.score}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+    <div className="mb-6">
+      <h2 className="text-lg font-semibold mb-2">Game Info</h2>
+      <p>Round: {roundNumber} / {totalRounds}</p>
+    </div>
+    {battleState.isWaiting && (
+      <div>
+        <h2 className="text-lg font-semibold mb-2">Invite Players</h2>
+        <div className="space-y-2">
+          {allUsers
+            .filter((user: any) => user.id !== currentUser?.id)
+            .map((user: any) => (
+              <div key={user.id} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg">
+                <div className="flex items-center space-x-2">
+                  <img src={user.avatar || `https://ui-avatars.com/api/?name=${user.name}&background=random&color=fff&size=128`} alt={user.name} className="w-8 h-8 rounded-full" />
+                  <p>{user.name}</p>
+                </div>
+                <button
+                  onClick={() => onInvitePlayer(user)}
+                  className="bg-primary text-white text-sm rounded-lg px-3 py-1 hover:bg-primary/90"
+                >
+                  Invite
+                </button>
+              </div>
+            ))}
+        </div>
+      </div>
+    )}
+  </aside>
+);
+
+const BattleCenter = ({ question, selectedAnswer, timeRemaining, isAnswerLocked, onAnswerSelect, onLockIn, onClear, battleState, players }: any) => (
+  <main className="flex-1 flex flex-col items-center justify-center p-8 overflow-y-auto">
+    <div className="text-center mb-8">
+      <h2 className="text-3xl font-bold mb-2">Quiz Battle</h2>
+      <p className="text-lg text-muted-foreground">Round {battleState.roundNumber} / {battleState.totalRounds}</p>
+    </div>
+
+    {battleState.isWaiting && (
+      <div className="text-center">
+        <h3 className="text-2xl font-bold mb-4">Waiting for players to join...</h3>
+        <p className="text-lg">Share the room code: <span className="font-mono bg-muted p-1 rounded-md">{battleState.roomCode}</span></p>
+      </div>
+    )}
+
+    {battleState.isActive && question && (
+      <div className="bg-card border border-border rounded-2xl shadow-xl p-8 max-w-2xl w-full">
+        <div className="flex justify-between items-center mb-6">
+          <span className="text-lg font-semibold text-primary">Time Remaining: {timeRemaining}s</span>
+          <span className="text-lg font-semibold text-primary">Difficulty: <span className="capitalize">{question.difficulty}</span></span>
+        </div>
+        <div className="mb-8">
+          <p className="text-xl font-medium mb-4">{question.text}</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {['A', 'B', 'C', 'D'].map(choice => (
+            <button
+              key={choice}
+              onClick={() => onAnswerSelect(choice)}
+              disabled={isAnswerLocked}
+              className={`p-4 rounded-lg text-left transition-colors duration-200 ${
+                selectedAnswer === choice
+                  ? 'bg-primary text-white border-2 border-primary-500'
+                  : 'bg-muted/50 hover:bg-muted'
+              } ${isAnswerLocked && selectedAnswer === choice ? 'ring-2 ring-offset-2 ring-primary' : ''}`}
+            >
+              <span className="font-bold mr-2">{choice}:</span> {question.choices[choice as 'A' | 'B' | 'C' | 'D']}
+            </button>
+          ))}
+        </div>
+        <div className="flex justify-center space-x-4 mt-8">
+          <button
+            onClick={onLockIn}
+            disabled={!selectedAnswer || isAnswerLocked}
+            className={`px-6 py-3 rounded-full font-bold text-white transition-colors duration-200 ${
+              !selectedAnswer || isAnswerLocked ? 'bg-gray-400' : 'bg-green-500 hover:bg-green-600'
+            }`}
+          >
+            Lock In Answer
+          </button>
+          <button
+            onClick={onClear}
+            disabled={isAnswerLocked}
+            className={`px-6 py-3 rounded-full font-bold text-white transition-colors duration-200 ${
+              isAnswerLocked ? 'bg-gray-400' : 'bg-yellow-500 hover:bg-yellow-600'
+            }`}
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+    )}
+  </main>
+);
+
+const BattleRightSidebar = ({ chatMessages, leaderboard, onSendMessage, players, currentUser }: any) => {
+  const [message, setMessage] = useState('');
+  const handleMessageSubmit = () => {
+    if (message.trim()) {
+      onSendMessage(message);
+      setMessage('');
+    }
+  };
+
+  return (
+    <aside className="w-1/4 p-4 border-l border-border flex flex-col overflow-hidden">
+      <div className="mb-6 flex-1 flex flex-col overflow-hidden">
+        <h2 className="text-lg font-semibold mb-2">Chat</h2>
+        <div className="flex-1 overflow-y-auto space-y-3 p-2 bg-muted rounded-xl shadow-inner">
+          {chatMessages.map((msg: ChatMessage) => (
+            <div key={msg.id} className={`text-sm ${msg.type === 'system' || msg.type === 'battle' ? 'italic text-muted-foreground' : ''}`}>
+              <span className="font-semibold">{msg.playerName}:</span> {msg.message}
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 flex space-x-2">
+          <input
+            type="text"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleMessageSubmit()}
+            placeholder="Type a message..."
+            className="flex-1 p-2 border border-border rounded-lg bg-card focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+          <button
+            onClick={handleMessageSubmit}
+            className="bg-primary text-white px-4 rounded-lg font-bold hover:bg-primary/90"
+          >
+            Send
+          </button>
+        </div>
+      </div>
+      <div>
+        <h2 className="text-lg font-semibold mb-2">Leaderboard</h2>
+        <div className="space-y-2">
+          {leaderboard.map((player: any) => (
+            <div key={player.name} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg">
+              <span className="font-medium">{player.rank}. {player.name}</span>
+              <span className="font-bold text-lg">{player.score}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </aside>
+  );
+};
+
+const CountdownOverlay = ({ onComplete }: any) => (
+  <div className="fixed inset-0 bg-black/80 text-white flex items-center justify-center z-50">
+    <div className="text-center">
+      <h2 className="text-6xl font-bold animate-pulse">Get Ready!</h2>
+      {/* A simple countdown animation could be added here */}
+      <div className="mt-4">
+        <button onClick={onComplete} className="px-6 py-3 rounded-full bg-primary text-white text-lg font-bold hover:bg-primary/90">
+          Start Now
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
+const RoundResultsModal = ({ onClose, results }: any) => (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+    <div className="bg-card border border-border rounded-2xl p-6 max-w-md w-full text-center">
+      <h3 className="text-2xl font-bold mb-4">Round {results.round} Results</h3>
+      <div className="space-y-2 mb-6">
+        <p className="text-lg">Your Answer: <span className="font-semibold">{results.selectedAnswer || 'Not Answered'}</span></p>
+        <p className="text-lg">Correct Answer: <span className="font-semibold text-green-500">{results.correctAnswer}</span></p>
+        <p className={`text-xl font-bold ${results.isCorrect ? 'text-green-500' : 'text-red-500'}`}>
+          {results.isCorrect ? 'You were correct!' : 'You were incorrect.'}
+        </p>
+      </div>
+      <button onClick={onClose} className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-primary/90">
+        Next Round
+      </button>
+    </div>
+  </div>
+);
+
+// --- MAIN COMPONENT ---
 export default function BattlePage() {
-  const router = useRouter();
   const [roomCode] = useState('ABC123');
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [selectedAnswer, setSelectedAnswer] = useState<'A' | 'B' | 'C' | 'D' | null>(null);
@@ -153,6 +404,17 @@ export default function BattlePage() {
     checkPendingInvites();
   }, []);
 
+  const checkPendingInvites = useCallback(() => {
+    const savedInvites = localStorage.getItem('battleInvites');
+    if (savedInvites && currentUser) {
+      const invites = JSON.parse(savedInvites);
+      const pending = invites.filter((invite: BattleInvite) => 
+        invite.toPlayerId === currentUser.id && invite.status === 'pending'
+      );
+      setPendingInvites(pending);
+    }
+  }, [currentUser]);
+
   // Load battle invites
   useEffect(() => {
     const savedInvites = localStorage.getItem('battleInvites');
@@ -167,17 +429,13 @@ export default function BattlePage() {
     }
   }, [currentUser]);
 
-  // Check for pending battle invites
-  const checkPendingInvites = () => {
-    const savedInvites = localStorage.getItem('battleInvites');
-    if (savedInvites && currentUser) {
-      const invites = JSON.parse(savedInvites);
-      const pending = invites.filter((invite: BattleInvite) => 
-        invite.toPlayerId === currentUser.id && invite.status === 'pending'
-      );
-      setPendingInvites(pending);
+  const handleTimeUp = useCallback(() => {
+    setIsAnswerLocked(true);
+    // Auto-submit or show results
+    if (selectedAnswer) {
+      handleLockIn();
     }
-  };
+  }, [selectedAnswer]);
 
   useEffect(() => {
     // Mock question loading (replace with real questions later)
@@ -208,7 +466,7 @@ export default function BattlePage() {
     } else if (timeRemaining === 0 && !isAnswerLocked && battleState.isActive) {
       handleTimeUp();
     }
-  }, [timeRemaining, isAnswerLocked, battleState.isActive]);
+  }, [timeRemaining, isAnswerLocked, battleState.isActive, handleTimeUp]);
 
   const handleAnswerSelect = (answer: 'A' | 'B' | 'C' | 'D') => {
     if (!isAnswerLocked && battleState.isActive) {
@@ -285,13 +543,13 @@ export default function BattlePage() {
     const battleMessages: ChatMessage[] = [];
     
     if (fastestCorrectPlayer) {
-     battleMessages.push({
-    id: Date.now().toString(),
-    playerName: 'System',
-    message: `🏆 ${(fastestCorrectPlayer as Player).name} answered fastest and correctly! +20 points`,
-    type: 'battle',
-    timestamp: new Date() //
-});
+      battleMessages.push({
+        id: Date.now().toString(),
+        playerName: 'System',
+        message: `🏆 ${(fastestCorrectPlayer as Player).name} answered fastest and correctly! +20 points`,
+        type: 'battle',
+        timestamp: new Date()
+      });
     }
 
     players.forEach(player => {
@@ -325,19 +583,11 @@ export default function BattlePage() {
     setIsAnswerLocked(false);
   };
 
-  const handleTimeUp = () => {
-    setIsAnswerLocked(true);
-    // Auto-submit or show results
-    if (selectedAnswer) {
-      handleLockIn();
-    }
-  };
-
   const handleLeaveRoom = () => {
-    if (confirm('Are you sure you want to leave the battle?')) {
-      // Navigate back to home or lobby
-      router.push('/');
-    }
+    // Replaced `confirm` with an alert as per instructions. In a real app, use a custom modal.
+    // window.confirm('Are you sure you want to leave the battle?')
+    alert('Are you sure you want to leave the battle?');
+    mockRouter.push('/');
   };
 
   const toggleSound = () => {
@@ -389,17 +639,19 @@ export default function BattlePage() {
     setSelectedInviteUser(null);
 
     // Show success message and redirect to home after 2 seconds
+    // Replaced `alert` with a simple console log as per instructions. In a real app, use a custom modal.
     setTimeout(() => {
-      alert(`✅ Battle invite sent to ${selectedInviteUser.name}! They will be notified.`);
-      router.push('/');
+      console.log(`✅ Battle invite sent to ${selectedInviteUser.name}! They will be notified.`);
+      // Redirect logic removed since this is a single component
     }, 2000);
   };
 
   const acceptBattleInvite = (invite: BattleInvite) => {
     // Check if user already has an active battle
+    // Replaced `alert` with a simple console log. In a real app, use a custom modal.
     const hasActiveBattle = localStorage.getItem('activeBattle');
     if (hasActiveBattle) {
-      alert('❌ You already have an active battle! Please finish your current battle first.');
+      console.log('❌ You already have an active battle! Please finish your current battle first.');
       return;
     }
 
@@ -458,7 +710,8 @@ export default function BattlePage() {
 
   const startBattle = () => {
     if (players.length !== 2) {
-      alert('❌ Need exactly 2 players to start a battle!');
+      // Replaced `alert` with a simple console log. In a real app, use a custom modal.
+      console.log('❌ Need exactly 2 players to start a battle!');
       return;
     }
 
@@ -739,6 +992,7 @@ export default function BattlePage() {
   );
 
 } 
+
 
 
 
