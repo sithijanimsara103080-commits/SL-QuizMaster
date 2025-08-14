@@ -371,141 +371,7 @@ export default function BattlePage() {
       grade: player.grade || 'Unknown'
     }));
 
-  // Load real user data
-  useEffect(() => {
-    const savedCurrentUser = localStorage.getItem('currentUser');
-    const savedAllUsers = localStorage.getItem('allUsers');
-    
-    if (savedCurrentUser) {
-      const user = JSON.parse(savedCurrentUser);
-      setCurrentUser(user);
-      
-      // Add current user as first player
-      const currentPlayer: Player = {
-        id: user.id,
-        name: user.name,
-        grade: user.grade || 'Unknown',
-        score: typeof user.score === 'number' && !isNaN(user.score) ? user.score : 0,
-        streak: 0,
-        isOnline: true,
-        isRealPlayer: true,
-        avatar: user.avatar || `https://ui-avatars.com/api/?name=${user.name}&background=random&color=fff&size=128`
-      };
-      
-      setPlayers([currentPlayer]);
-    }
-    
-    if (savedAllUsers) {
-      const users = JSON.parse(savedAllUsers);
-      setAllUsers(users);
-    }
-
-    // Check for pending battle invites
-    checkPendingInvites();
-  }, []);
-
-  const checkPendingInvites = useCallback(() => {
-    const savedInvites = localStorage.getItem('battleInvites');
-    if (savedInvites && currentUser) {
-      const invites = JSON.parse(savedInvites);
-      const pending = invites.filter((invite: BattleInvite) => 
-        invite.toPlayerId === currentUser.id && invite.status === 'pending'
-      );
-      setPendingInvites(pending);
-    }
-  }, [currentUser]);
-
-  // Load battle invites
-  useEffect(() => {
-    const savedInvites = localStorage.getItem('battleInvites');
-    if (savedInvites) {
-      const invites = JSON.parse(savedInvites);
-      setBattleInvites(invites);
-      // Filter pending invites for current user
-      const pending = invites.filter((invite: BattleInvite) => 
-        invite.toPlayerId === currentUser?.id && invite.status === 'pending'
-      );
-      setPendingInvites(pending);
-    }
-  }, [currentUser]);
-
-  const handleTimeUp = useCallback(() => {
-    setIsAnswerLocked(true);
-    // Auto-submit or show results
-    if (selectedAnswer) {
-      handleLockIn();
-    }
-  }, [selectedAnswer]);
-
-  useEffect(() => {
-    // Mock question loading (replace with real questions later)
-    const mockQuestion: Question = {
-      id: '1',
-      category: 'Mathematics',
-      difficulty: 'medium',
-      text: 'What is the value of x in the equation 2x + 5 = 13?',
-      choices: {
-        A: 'x = 3',
-        B: 'x = 4',
-        C: 'x = 5',
-        D: 'x = 6',
-      },
-      correctAnswer: 'B',
-      timeLimit: 30,
-    };
-    setCurrentQuestion(mockQuestion);
-    setTimeRemaining(mockQuestion.timeLimit);
-  }, []);
-
-  useEffect(() => {
-    if (timeRemaining > 0 && !isAnswerLocked && battleState.isActive) {
-      const timer = setInterval(() => {
-        setTimeRemaining(prev => prev - 1);
-      }, 1000);
-      return () => clearInterval(timer);
-    } else if (timeRemaining === 0 && !isAnswerLocked && battleState.isActive) {
-      handleTimeUp();
-    }
-  }, [timeRemaining, isAnswerLocked, battleState.isActive, handleTimeUp]);
-
-  const handleAnswerSelect = (answer: 'A' | 'B' | 'C' | 'D') => {
-    if (!isAnswerLocked && battleState.isActive) {
-      setSelectedAnswer(answer);
-    }
-  };
-
-  const handleLockIn = () => {
-    if (selectedAnswer && battleState.isActive) {
-      setIsAnswerLocked(true);
-      const answerTime = Date.now();
-      
-      // Update current player's answer
-      setPlayers(prev => prev.map(player => 
-        player.id === currentUser?.id 
-          ? { 
-              ...player, 
-              currentAnswer: selectedAnswer, 
-              isAnswerLocked: true, 
-              answerTime,
-              isCorrect: selectedAnswer === currentQuestion?.correctAnswer
-            }
-          : player
-      ));
-
-      // Check if all players have answered
-      checkAllPlayersAnswered();
-    }
-  };
-
-  const checkAllPlayersAnswered = () => {
-    const allAnswered = players.every(player => player.isAnswerLocked);
-    if (allAnswered) {
-      // Calculate scores and show results
-      calculateRoundScores();
-    }
-  };
-
-  const calculateRoundScores = () => {
+  const calculateRoundScores = useCallback(() => {
     const roundEndTime = Date.now();
     const roundDuration = roundEndTime - battleState.roundStartTime;
     
@@ -547,8 +413,8 @@ export default function BattlePage() {
         id: Date.now().toString(),
         playerName: 'System',
         message: `🏆 ${(fastestCorrectPlayer as Player).name} answered fastest and correctly! +20 points`,
-        type: 'battle',
-        timestamp: new Date()
+        timestamp: new Date(),
+        type: 'battle'
       });
     }
 
@@ -576,6 +442,144 @@ export default function BattlePage() {
 
     // Show round results
     setShowRoundResults(true);
+  }, [battleState.roundStartTime, players, setPlayers, setChatMessages]);
+
+  const checkAllPlayersAnswered = useCallback(() => {
+    const allAnswered = players.every(player => player.isAnswerLocked);
+    if (allAnswered) {
+      // Calculate scores and show results
+      calculateRoundScores();
+    }
+  }, [players, calculateRoundScores]);
+
+  const handleLockIn = useCallback(() => {
+    if (selectedAnswer && battleState.isActive) {
+      setIsAnswerLocked(true);
+      const answerTime = Date.now();
+      
+      // Update current player's answer
+      setPlayers(prev => prev.map(player => 
+        player.id === currentUser?.id 
+          ? { 
+              ...player, 
+              currentAnswer: selectedAnswer, 
+              isAnswerLocked: true, 
+              answerTime,
+              isCorrect: selectedAnswer === currentQuestion?.correctAnswer
+            }
+          : player
+      ));
+
+      // Check if all players have answered
+      checkAllPlayersAnswered();
+    }
+  }, [selectedAnswer, battleState.isActive, setPlayers, currentUser, currentQuestion, checkAllPlayersAnswered]);
+
+  const handleTimeUp = useCallback(() => {
+    setIsAnswerLocked(true);
+    // Auto-submit or show results
+    if (selectedAnswer) {
+      handleLockIn();
+    }
+  }, [selectedAnswer, handleLockIn]);
+
+  const checkPendingInvites = useCallback(() => {
+    const savedInvites = localStorage.getItem('battleInvites');
+    if (savedInvites && currentUser) {
+      const invites = JSON.parse(savedInvites);
+      const pending = invites.filter((invite: BattleInvite) => 
+        invite.toPlayerId === currentUser.id && invite.status === 'pending'
+      );
+      setPendingInvites(pending);
+    }
+  }, [currentUser]);
+
+  // Load real user data and set up initial state
+  useEffect(() => {
+    const savedCurrentUser = localStorage.getItem('currentUser');
+    const savedAllUsers = localStorage.getItem('allUsers');
+    
+    if (savedCurrentUser) {
+      const user = JSON.parse(savedCurrentUser);
+      setCurrentUser(user);
+      
+      // Add current user as first player
+      const currentPlayer: Player = {
+        id: user.id,
+        name: user.name,
+        grade: user.grade || 'Unknown',
+        score: typeof user.score === 'number' && !isNaN(user.score) ? user.score : 0,
+        streak: 0,
+        isOnline: true,
+        isRealPlayer: true,
+        avatar: user.avatar || `https://ui-avatars.com/api/?name=${user.name}&background=random&color=fff&size=128`
+      };
+      
+      setPlayers([currentPlayer]);
+    }
+    
+    if (savedAllUsers) {
+      const users = JSON.parse(savedAllUsers);
+      setAllUsers(users);
+    }
+  }, []);
+
+  // Check for pending invites after currentUser is set
+  useEffect(() => {
+    if (currentUser) {
+      checkPendingInvites();
+    }
+  }, [currentUser, checkPendingInvites]);
+
+  // Load battle invites
+  useEffect(() => {
+    const savedInvites = localStorage.getItem('battleInvites');
+    if (savedInvites) {
+      const invites = JSON.parse(savedInvites);
+      setBattleInvites(invites);
+      // Filter pending invites for current user
+      const pending = invites.filter((invite: BattleInvite) => 
+        invite.toPlayerId === currentUser?.id && invite.status === 'pending'
+      );
+      setPendingInvites(pending);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    // Mock question loading (replace with real questions later)
+    const mockQuestion: Question = {
+      id: '1',
+      category: 'Mathematics',
+      difficulty: 'medium',
+      text: 'What is the value of x in the equation 2x + 5 = 13?',
+      choices: {
+        A: 'x = 3',
+        B: 'x = 4',
+        C: 'x = 5',
+        D: 'x = 6',
+      },
+      correctAnswer: 'B',
+      timeLimit: 30,
+    };
+    setCurrentQuestion(mockQuestion);
+    setTimeRemaining(mockQuestion.timeLimit);
+  }, []);
+
+  useEffect(() => {
+    if (timeRemaining > 0 && !isAnswerLocked && battleState.isActive) {
+      const timer = setInterval(() => {
+        setTimeRemaining(prev => prev - 1);
+      }, 1000);
+      return () => clearInterval(timer);
+    } else if (timeRemaining === 0 && !isAnswerLocked && battleState.isActive) {
+      handleTimeUp();
+    }
+  }, [timeRemaining, isAnswerLocked, battleState.isActive, handleTimeUp]);
+
+  const handleAnswerSelect = (answer: 'A' | 'B' | 'C' | 'D') => {
+    if (!isAnswerLocked && battleState.isActive) {
+      setSelectedAnswer(answer);
+    }
   };
 
   const handleClear = () => {
@@ -967,7 +971,6 @@ export default function BattlePage() {
             battleState={battleState}
             players={players}
           />
-
           {/* Right Sidebar */}
           <BattleRightSidebar
             chatMessages={chatMessages}
@@ -992,6 +995,7 @@ export default function BattlePage() {
   );
 
 } 
+
 
 
 
