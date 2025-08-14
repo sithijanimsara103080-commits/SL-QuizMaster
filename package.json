@@ -1,5 +1,4 @@
-"scripts": {
-  "start": "node server.js" 
+{
   "name": "test_app",
   "version": "0.1.0",
   "private": true,
